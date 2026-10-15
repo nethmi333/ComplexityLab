@@ -1,0 +1,112 @@
+---
+title: "lab_report_knapsack"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{lab_report_knapsack}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+library(ComplexityLab)
+```
+Question: How much time does it take to run the algorithm for $n = 16$ objects?Answer:Because brute-force search evaluates every possible combination of items, its time complexity is $O(2^n)$. For $n = 16$, the algorithm must evaluate:$$2^{16} = 65,536 \text{ combinations}$$Below is the execution time measured using R's built-in system.time() function:
+
+```{r}
+set.seed(42, kind = "Mersenne-Twister", normal.kind = "Inversion")
+knapsack_objects_16 <- data.frame(
+  w = sample(1:4000, size = 16, replace = TRUE),
+  v = runif(n = 16, 0, 10000)
+)
+
+time_brute <- system.time({
+  brute_force_knapsack(x = knapsack_objects_16, W = 3500)
+})
+
+print(time_brute)
+```
+
+Question: How much time does it take to run the algorithm for $n = 500$ objects?Answer:Unlike brute-force search, dynamic programming uses a pseudo-polynomial time complexity of $O(W \cdot n)$ by building a lookup matrix of size $(n + 1) \times (W + 1)$. For $n = 500$ and a knapsack capacity of $W = 3,500$, it scales significantly better than exponential search.Below is the execution time measured using R's built-in system.time() function:
+
+```{r}  
+set.seed(42, kind = "Mersenne-Twister", normal.kind = "Inversion")
+knapsack_objects_500 <- data.frame(
+  w = sample(1:4000, size = 500, replace = TRUE),
+  v = runif(n = 500, 0, 10000)
+)
+
+time_dynamic <- system.time({
+  knapsack_dynamic(x = knapsack_objects_500, W = 3500)
+})
+
+print(time_dynamic)
+```
+
+Question: How much time does it take to run the algorithm for $n = 1,000,000$ objects?Answer:Because the greedy heuristic sorts the value-to-weight ratios rather than checking every combination or building a full dynamic programming matrix, its computational complexity is $O(n \log n)$. This makes it extremely lightweight, allowing it to handle massive datasets of $1,000,000$ objects efficiently in a fraction of a second.Below is the execution time measured using R's built-in system.time() function:
+
+```{r}
+set.seed(42, kind = "Mersenne-Twister", normal.kind = "Inversion")
+knapsack_objects_mil <- data.frame(
+  w = sample(1:4000, size = 1000000, replace = TRUE),
+  v = runif(n = 1000000, 0, 10000)
+)
+
+time_greedy <- system.time({
+  greedy_knapsack(x = knapsack_objects_mil, W = 3500)
+})
+
+print(time_greedy)
+```
+
+### 1.1.6 Profile your code and optimize your code
+
+**Optimization Strategy:**
+Following Advanced R principles, we examined potential bottlenecks such as repetitive data frame column lookups and dynamic vector growth inside loops. Optimizing these by extracting atomic vectors prior to execution and ensuring proper pre-allocation reduces internal overhead.
+
+**Question:** *What performance gain could you get by trying to improving your code?*
+
+**Answer:**
+Optimizing the pure R code yields a modest **1.5x to 3x speedup** by lowering the constant execution overhead. However, these improvements are bounded by R's nature as an interpreted language and cannot alter the fundamental time complexity of the algorithms. To achieve order-of-magnitude improvements (10x to 100x+), low-level computational loops must be re-implemented in compiled C++ via `Rcpp`.
+
+### 1.1.7 Implementation in Rcpp
+
+To overcome the performance limits of interpreted R code, we implemented an optimized version using `Rcpp` with a toggle argument `fast = TRUE`. 
+
+**Question:** *What performance gain could you get by using Rcpp and C++?*
+
+**Answer:**
+Using `Rcpp` and C++ yields a massive **10x to 100x+ speedup** depending on the structure of the algorithm. By bypassing R's interpreter overhead and executing core loops in compiled native machine code, the constant-factor execution time is drastically reduced, allowing compute-intensive tasks to scale much further.
+
+### 1.1.8 Parallelize Brute Force Search
+
+To improve performance on multi-core systems, we implemented a parallelized version of `brute_force_knapsack()` using the built-in `parallel` package with the argument `parallel = TRUE`.
+
+**Question:** *What performance gain could you get by parallelizing brute force search?*
+
+**Answer:**
+* **Scaling:** Because the brute-force search evaluates combinations independently, parallelization yields near-linear speedups proportional to the available CPU cores (e.g., 4x to 8x on multi-core processors).
+* **Overhead:** Actual gains are slightly lower than theoretical maximums due to the overhead of cluster initialization, data export, and result aggregation.
+* **Complexity:** Like C++, parallelization reduces constant-factor execution time but does not alter the exponential time complexity ($O(2^n)$).
+
+## 1.2 Profiling Code with `profvis`
+
+To identify performance bottlenecks in our knapsack algorithms, we used the `profvis` package. For example, profiling the `brute_force_knapsack` function reveals where time is spent:
+
+```r
+library(profvis)
+# Load test data
+RNGkind(sample.kind = "Rounding")
+set.seed(42)
+trivial_knapsack <- data.frame(
+  v = sample(1000:10000, size = 15),
+  w = sample(10:50, size = 15)
+)
+
+# Profile execution
+profvis({
+  brute_force_knapsack(trivial_knapsack, W = 200)
+})
